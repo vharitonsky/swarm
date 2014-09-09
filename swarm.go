@@ -14,13 +14,20 @@ type Job struct {
 }
 
 type Handler interface {
-	Handle()
+	Handle(interface{})
 }
 
-func HandlerFunc() {}
+type HandlerFunc func(interface{})
+
+func (f HandlerFunc) Handle(args interface{}) {
+	f(args)
+}
 
 func Submit(addr, queue, name string, args interface{}) {
 	redis_conn, err := redis.Dial("tcp", addr)
+	if err != nil {
+		log.Fatalf("Can't connect to redis@%s: %s", addr, err)
+	}
 	defer redis_conn.Close()
 	job := Job{
 		Name: name,
@@ -37,7 +44,7 @@ func Listen(addr, queue string, workers int) {
 		log.Fatalf("Can't connect to master@%s: %s", addr, err)
 	}
 	defer redis_conn.Close()
-	handlerMap := make(map[string]*Handler, 0)
+	handlerMap := make(map[string]Handler, 0)
 	freeWorkersChan := make(chan bool, workers)
 	for i := 0; i < workers; i++ {
 		freeWorkersChan <- true
