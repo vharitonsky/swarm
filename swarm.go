@@ -9,21 +9,21 @@ import (
 
 type Job struct {
 	Name string
-	Args interface{}
+	Args []interface{}
 	TTL  int
 }
 
 type Handler interface {
-	Handle(interface{})
+	Handle(...interface{})
 }
 
-type HandlerFunc func(interface{})
+type HandlerFunc func(...interface{})
 
-func (f HandlerFunc) Handle(args interface{}) {
-	f(args)
+func (f HandlerFunc) Handle(args ...interface{}) {
+	f(args...)
 }
 
-func Submit(addr, queue, name string, args interface{}) {
+func Submit(addr, queue, name string, args ...interface{}) {
 	redis_conn, err := redis.Dial("tcp", addr)
 	if err != nil {
 		log.Fatalf("Can't connect to redis@%s: %s", addr, err)
@@ -71,7 +71,7 @@ func Listen(addr, queue string, workers int) {
 			continue
 		}
 		go func() {
-			handler.Handle(job.Args)
+			handler.Handle(job.Args...)
 			freeWorkersChan <- true
 		}()
 	}
