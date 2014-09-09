@@ -5,6 +5,7 @@ import (
 	"github.com/fzzy/radix/redis"
 	"log"
 	"runtime"
+	"time"
 )
 
 var (
@@ -64,24 +65,25 @@ func Listen(addr, queue string, workers int) {
 		log.Fatalf("Can't connect to master@%s: %s", addr, err)
 	}
 	defer redis_conn.Close()
-	freeWorkersChan := make(chan bool, workers)
+	freeWorkersChan := make(chan string, workers)
 	for i := 0; i < workers; i++ {
-		freeWorkersChan <- true
+		workerId := GenerateId() 
+		freeWorkersChan <- workerId
 	}
 
 	runtime.GOMAXPROCS(workers)
-	for _ = range freeWorkersChan {
+	for workerId := range freeWorkersChan {
 		job := Job{}
 		reply, err := redis_conn.Cmd("BRPOP", queue, 0).List()
 		if err != nil {
 			log.Printf("Can't receive job message:", err)
-			freeWorkersChan <- true
+			freeWorkersChan <- workerId
 			continue
 		}
 		err = json.Unmarshal([]byte(reply[1]), &job)
 		if err != nil {
 			log.Printf("Can't parse job message:", err)
-			freeWorkersChan <- true
+			freeWorkersChan <- workerId
 			continue
 		}
 		handler, found := handlerMap[job.Name]
@@ -92,12 +94,15 @@ func Listen(addr, queue string, workers int) {
 				jobBlob, _ := json.Marshal(job)
 				redis_conn.Cmd("PUSH", queue, string(jobBlob))
 			}
-			freeWorkersChan <- true
+			freeWorkersChan <- workerId
 			continue
 		}
-		go func() {
+		go func(workerId string, job Job) {
+			log.Printf("[%s] Received job '%s' with args '%v'", workerId, job.Name, job.Args)
+			start_time := time.Now()
 			handler.Handle(job.Args...)
-			freeWorkersChan <- true
-		}()
+			log.Printf("[%s] Job %s complete in %s", workerId, job.Name, time.Since(start_time))
+			freeWorkersChan <- workerId
+		}(workerId, job)
 	}
 }

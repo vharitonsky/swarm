@@ -18,7 +18,7 @@ func EchoHandler(args ...interface{}) {
 
 func main() {
 	flag.Parse()
-	log.Print("Running EchoHandler. Master:", master)
+	log.Print("Running EchoHandler. Master:", *master)
 	swarm_master := swarm.NewMaster(*master, *queue)
 	swarm_master.Submit("echo", []interface{}{1, 2, 3}...)
 	swarm.Handle("echo", swarm.HandlerFunc(EchoHandler))
