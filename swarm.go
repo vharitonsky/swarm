@@ -67,7 +67,7 @@ func Listen(addr, queue string, workers int) {
 	defer redis_conn.Close()
 	freeWorkersChan := make(chan string, workers)
 	for i := 0; i < workers; i++ {
-		workerId := GenerateId() 
+		workerId := GenerateId()
 		freeWorkersChan <- workerId
 	}
 
@@ -101,7 +101,7 @@ func Listen(addr, queue string, workers int) {
 			log.Printf("[%s] Received job '%s' with args '%v'", workerId, job.Name, job.Args)
 			start_time := time.Now()
 			handler.Handle(job.Args...)
-			log.Printf("[%s] Job %s complete in %s", workerId, job.Name, time.Since(start_time))
+			log.Printf("[%s] Job '%s' with args %s complete in %s", workerId, job.Name, job.Args, time.Since(start_time))
 			freeWorkersChan <- workerId
 		}(workerId, job)
 	}
