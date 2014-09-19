@@ -4,6 +4,7 @@ import (
 	"flag"
 	"github.com/vharitonsky/swarm"
 	"log"
+	"runtime"
 )
 
 var (
@@ -19,8 +20,9 @@ func EchoHandler(args ...interface{}) {
 func main() {
 	flag.Parse()
 	log.Print("Running EchoHandler. Master:", *master)
-	swarm_master := swarm.NewMaster(*master, *queue)
-	swarm_master.Submit("echo", []interface{}{1, 2, 3}...)
+	runtime.GOMAXPROCS(*workers)
+	swarmMaster := swarm.NewMaster(*master, *queue)
+	swarmMaster.Submit("echo", []interface{}{1, 2, 3}...)
 	swarm.Handle("echo", swarm.HandlerFunc(EchoHandler))
 	swarm.Listen(*master, *queue, *workers)
 }

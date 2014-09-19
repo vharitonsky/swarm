@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"runtime"
 	"time"
 )
 
@@ -223,6 +222,5 @@ func (m *Master) WatchSlaves() {
 }
 
 func Listen(addr, queue string, workersCount int) error {
-	runtime.GOMAXPROCS(workersCount)
 	return NewSlave(addr, queue, workersCount).Serve()
 }
