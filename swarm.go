@@ -20,11 +20,12 @@ type Master struct {
 }
 
 type Slave struct {
-	id           string
-	addr         string
-	queue        string
-	pool         chan string
-	workersCount int
+	id             string
+	addr           string
+	queue          string
+	pool           chan string
+	workersCount   int
+	busyWorkersMap map[string]bool
 }
 
 type Job struct {
@@ -58,16 +59,25 @@ func NewMaster(addr, queue string) *Master {
 
 func NewSlave(addr, queue string, workersCount int) *Slave {
 	slave := Slave{
-		id:           GenerateId(),
-		addr:         addr,
-		queue:        queue,
-		workersCount: workersCount,
-		pool:         make(chan string, workersCount),
+		id:             GenerateId(),
+		addr:           addr,
+		queue:          queue,
+		workersCount:   workersCount,
+		pool:           make(chan string, workersCount),
+		busyWorkersMap: make(map[string]bool, 0),
 	}
 	for i := 0; i < workersCount; i++ {
 		slave.pool <- GenerateId()
 	}
 	return &slave
+}
+
+func (s *Slave) allocWorker(workerId string) {
+	s.busyWorkersMap[workerId] = true
+}
+
+func (s *Slave) freeWorker(workerId string) {
+	delete(s.busyWorkersMap, workerId)
 }
 
 func (s *Slave) Serve() (err error) {
@@ -108,6 +118,8 @@ func (s *Slave) Serve() (err error) {
 		}
 		go func(workerId string, job Job) {
 			log.Printf("[%s] Received job '%s' with args '%v'", workerId, job.Name, job.Args)
+			s.allocWorker(workerId)
+			defer s.freeWorker(workerId)
 			start_time := time.Now()
 			handler.Handle(job.Args...)
 			log.Printf("[%s] Job '%s' with args '%v' complete in %s", workerId, job.Name, job.Args, time.Since(start_time))
@@ -125,7 +137,7 @@ func (s *Slave) GetReport() SlaveReport {
 	return SlaveReport{
 		Id:           s.id,
 		TotalWorkers: s.workersCount,
-		BusyWorkers:  s.workersCount - len(s.pool),
+		BusyWorkers:  s.workersCount - len(s.busyWorkersMap),
 		ListeningTo:  s.queue,
 		Hostname:     hostname,
 		Generated:    time.Now().Format(time.UnixDate),
@@ -201,7 +213,7 @@ func (m *Master) WatchSlaves() {
 				redisConn.Cmd("HDEL", "_swarm_worker_reports", lastkey)
 				continue
 			}
-			runningReports = append(runningReports, fmt.Sprintf("\n" +
+			runningReports = append(runningReports, fmt.Sprintf("\n"+
 				"ID: %s\n"+
 				"HOST: %s\n"+
 				"WORKERS: %d/%d\n"+
