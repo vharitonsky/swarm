@@ -3,7 +3,7 @@ package swarm
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fzzy/radix/redis"
+	zmq "github.com/pebbe/zmq4"
 	"log"
 	"math"
 	"os"
@@ -81,12 +81,18 @@ func (s *Slave) freeWorker(workerId string) {
 }
 
 func (s *Slave) Serve() (err error) {
-	redisConn, err := redis.Dial("tcp", s.addr)
+	context, err := zmq.NewContext()
 	if err != nil {
-		err = fmt.Errorf("Can't connect to master@%s: %s", s.addr, err)
+		err = fmt.Errorf("Can't open context: %s", err)
 		return
 	}
-	defer redisConn.Close()
+	defer context.Term()
+	socket, err := context.NewSocket(zmq.REQ)
+	if err != nil {
+		err = fmt.Errorf("Can't open socket: %s", err)
+		return
+	}
+	defer socket.Close()
 	go func() {
 		for {
 			s.SubmitReport()
@@ -97,11 +103,11 @@ func (s *Slave) Serve() (err error) {
 		job := Job{}
 		reply, err := redisConn.Cmd("BRPOP", s.queue, 0).List()
 		if err != nil {
-			return fmt.Errorf("Can't receive job message:", err)
+			return fmt.Errorf("Can't receive job message: %s", err)
 		}
 		err = json.Unmarshal([]byte(reply[1]), &job)
 		if err != nil {
-			log.Printf("Can't parse job message:", err)
+			log.Printf("Can't parse job message: %s", err)
 			s.pool <- workerId
 			continue
 		}
